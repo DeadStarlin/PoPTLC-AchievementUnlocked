@@ -1,0 +1,18 @@
+# Auto-detect text files and normalize line endings
+* text=auto
+
+# Source code and configuration
+*.cs text diff=csharp
+*.json text
+*.md text
+*.txt text
+*.ini text
+*.cfg text
+
+# PowerShell scripts
+*.ps1 text eol=crlf
+
+# Binary files
+*.dll binary
+*.exe binary
+*.pdb binary
