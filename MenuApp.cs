@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using System.Windows.Forms;
@@ -22,6 +23,7 @@ internal sealed class MenuForm : Form
     private readonly string folder;
     private View view;
     private string lastJson = "";
+    private readonly List<int> visibleIndices = new();
     private readonly ListBox list = new() { Left = 12, Top = 52, Width = 650, Height = 380 };
     private readonly Label description = new() { Left = 12, Top = 440, Width = 650, Height = 65 };
     private readonly Label status = new() { Left = 12, Top = 550, Width = 650, Height = 60 };
@@ -29,6 +31,17 @@ internal sealed class MenuForm : Form
     private readonly Label platformLabel = new() { Left = 12, Top = 16, Width = 300, Text = "Ubisoft Connect achievements" };
     private readonly Button refresh = new() { Left = 510, Top = 12, Width = 150, Text = "Refresh" };
     private readonly Timer timer = new() { Interval = 250 };
+
+    private int SelectedEntryIndex
+    {
+        get
+        {
+            if (view == null || list.SelectedIndex < 0 || list.SelectedIndex >= visibleIndices.Count)
+                return -1;
+            var index = visibleIndices[list.SelectedIndex];
+            return (index >= 0 && index < view.Entries.Length) ? index : -1;
+        }
+    }
 
     internal MenuForm(string folder)
     {
@@ -42,17 +55,18 @@ internal sealed class MenuForm : Form
         refresh.Click += (_, _) => Send(1, -1);
         list.SelectedIndexChanged += (_, _) =>
         {
-            var index = list.SelectedIndex;
+            var index = SelectedEntryIndex;
             description.Text = view != null && index >= 0 ? view.Entries[index].Description : "";
             unlock.Enabled = view != null && Selection.Valid(new Command("", view.Platform, index, view.ListId), view);
         };
         unlock.Click += (_, _) =>
         {
-            if (view == null || list.SelectedIndex < 0) return;
-            var entry = view.Entries[list.SelectedIndex];
+            var index = SelectedEntryIndex;
+            if (view == null || index < 0) return;
+            var entry = view.Entries[index];
             if (MessageBox.Show(this, $"Unlock '{entry.Name}' on Ubisoft Connect? This may be permanent.",
                 "Unlock achievement", MessageBoxButtons.YesNo) == DialogResult.Yes)
-                Send(view.Platform, list.SelectedIndex);
+                Send(view.Platform, index);
         };
         KeyDown += (_, e) => { if (e.KeyCode == Keys.F8) Close(); };
         timer.Tick += (_, _) => ReadView();
@@ -88,13 +102,24 @@ internal sealed class MenuForm : Form
             lastJson = json;
             if (listChanged)
             {
+                list.BeginUpdate();
                 list.Items.Clear();
-                foreach (var entry in view.Entries) list.Items.Add($"[{(entry.Unlocked ? "Unlocked" : "Locked")}] {entry.Name}");
+                visibleIndices.Clear();
+                for (var i = 0; i < view.Entries.Length; i++)
+                {
+                    var entry = view.Entries[i];
+                    if (!entry.Unlocked)
+                    {
+                        visibleIndices.Add(i);
+                        list.Items.Add(entry.Name);
+                    }
+                }
+                list.EndUpdate();
                 description.Text = "";
             }
             status.Text = view.Status;
             refresh.Enabled = !view.Busy;
-            unlock.Enabled = Selection.Valid(new Command("", view.Platform, list.SelectedIndex, view.ListId), view);
+            unlock.Enabled = Selection.Valid(new Command("", view.Platform, SelectedEntryIndex, view.ListId), view);
         }
         catch (IOException) { }
         catch (Exception ex) { status.Text = ex.Message; }
